@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ master ]
 
+permissions:
+  contents: write
+  packages: write
+  
 env:
   AWS_DB_URL: ${{ secrets.AWS_DB_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }}
   TALLY_URL: ${{ secrets.TALLY_URL || 'http://localhost:9000' }}
@@ -62,6 +66,8 @@ jobs:
   build:
     needs: test
     runs-on: windows-latest
+    permissions:
+      contents: write
     
     steps:
     - uses: actions/checkout@v3
@@ -91,10 +97,16 @@ jobs:
       run: |
         powershell Compress-Archive -Path dist/tallyfy_ai.exe -DestinationPath tallyfy_ai.zip
         
-    - name: Upload build artifact
+    - name: Upload exe artifact
       uses: actions/upload-artifact@v4
       with:
-        name: tallyfy-ai-windows
+        name: tallyfy-ai-exe
+        path: dist/tallyfy_ai.exe
+        
+    - name: Upload zip artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tallyfy-ai-zip
         path: tallyfy_ai.zip
         
     - name: Create Release
@@ -107,6 +119,5 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          tallyfy_ai.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          dist/tallyfy_ai.exe
+          tallyfy_ai.zip 
