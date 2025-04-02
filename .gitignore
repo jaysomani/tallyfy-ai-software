@@ -1,0 +1,30 @@
+# Exclude local storage and database files
+local_storage.zip
+local_storage.db
+
+# Logs
+*.log
+tally_connector.log
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Coverage files
+.coverage
+htmlcov/
+
+# Environment variables
+.env
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/ 

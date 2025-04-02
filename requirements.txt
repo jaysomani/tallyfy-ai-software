@@ -1,0 +1,40 @@
+# Web Framework & Server
+Flask>=2.0.0
+
+# Database & ORM
+SQLAlchemy>=1.4.0
+
+# AWS & Cognito
+boto3>=1.24.0
+
+# Environment Variables
+python-dotenv>=0.20.0
+
+# HTTP Requests
+requests>=2.28.0
+
+# WebSocket Server (async)
+websockets>=10.0
+
+# JWT Handling
+PyJWT>=2.6.0
+
+# GUI Framework
+PyQt6>=6.4.0
+
+# Testing (for unit tests)
+pytest>=7.0.0
+pytest-qt>=4.0.0
+pytest-mock>=3.10.0
+pytest-cov>=4.1.0
+coverage>=7.3.0
+
+# XML Processing
+lxml>=5.3.1
+
+# PostgreSQL Driver
+psycopg2-binary>=2.9.10
+
+# Production Server
+gunicorn>=23.0.0
+gevent>=24.11.1
