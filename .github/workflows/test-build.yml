@@ -92,7 +92,7 @@ jobs:
         powershell Compress-Archive -Path dist/tallyfy_ai.exe -DestinationPath tallyfy_ai.zip
         
     - name: Upload build artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: tallyfy-ai-windows
         path: tallyfy_ai.zip
@@ -100,22 +100,13 @@ jobs:
     - name: Create Release
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
         tag_name: v0.1.${{ github.run_number }}
-        release_name: Build ${{ github.run_number }}
+        name: Build ${{ github.run_number }}
         draft: false
         prerelease: false
-        
-    - name: Upload Release Asset
-      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-      uses: actions/upload-release-asset@v1
+        files: |
+          tallyfy_ai.zip
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./tallyfy_ai.zip
-        asset_name: tallyfy_ai.zip
-        asset_content_type: application/zip 
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
