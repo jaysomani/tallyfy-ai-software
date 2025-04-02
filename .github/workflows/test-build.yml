@@ -99,6 +99,12 @@ jobs:
         New-Item -Path 'data' -ItemType Directory -Force
         echo "This is a placeholder file" > data/placeholder.txt
         
+        # Create templates and static directories if they don't exist
+        New-Item -Path 'templates' -ItemType Directory -Force
+        New-Item -Path 'static' -ItemType Directory -Force
+        echo "<!DOCTYPE html><html><body><h1>Placeholder</h1></body></html>" > templates/index.html
+        echo "/* Placeholder CSS */" > static/style.css
+        
     - name: Create PyInstaller spec file
       run: |
         echo "# -*- mode: python ; coding: utf-8 -*-
@@ -107,19 +113,25 @@ jobs:
         
         a = Analysis(
             ['main.py'],
-            pathex=[],
+            pathex=['.'],
             binaries=[],
             datas=[
                 ('.env', '.'),
                 ('local_storage.db', '.'),
-                ('data', 'data')
+                ('data', 'data'),
+                ('templates', 'templates'),
+                ('static', 'static')
             ],
-            hiddenimports=['gui', 'gui.login_widget', 'gui.ledger_widget', 'gui.main_window', 'gui.user_icon', 
-                          'backend', 'backend.cognito_auth', 'backend.config', 'backend.db_connector', 
-                          'backend.tally_api', 'backend.local_db_connector', 'backend.hardware', 
-                          'services', 'services.flask_server', 'services.websocket_server',
-                          'utils', 'utils.logging_config',
-                          'PyQt5', 'PyQt5.QtCore', 'PyQt5.QtWidgets', 'PyQt5.QtGui'],
+            hiddenimports=[
+                'gui', 'gui.login_widget', 'gui.ledger_widget', 'gui.main_window', 'gui.user_icon', 
+                'backend', 'backend.cognito_auth', 'backend.config', 'backend.db_connector', 
+                'backend.tally_api', 'backend.local_db_connector', 'backend.hardware', 
+                'services', 'services.flask_server', 'services.websocket_server',
+                'utils', 'utils.logging_config',
+                'PyQt5', 'PyQt5.QtCore', 'PyQt5.QtWidgets', 'PyQt5.QtGui',
+                'flask', 'flask.json', 'werkzeug', 'jinja2', 'itsdangerous',
+                'boto3', 'botocore', 'psycopg2', 'sqlalchemy', 'requests'
+            ],
             hookspath=[],
             hooksconfig={},
             runtime_hooks=[],
@@ -135,31 +147,26 @@ jobs:
         exe = EXE(
             pyz,
             a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
             [],
-            exclude_binaries=True,
             name='TallyfyAI',
             debug=False,
             bootloader_ignore_signals=False,
             strip=False,
             upx=True,
-            console=True,  # Set to True for debugging
+            upx_exclude=[],
+            runtime_tmpdir=None,
+            console=True,  # Keep console for now to see any errors
             disable_windowed_traceback=False,
             argv_emulation=False,
             target_arch=None,
             codesign_identity=None,
             entitlements_file=None,
+            icon=None,
         )
-        
-        coll = COLLECT(
-            exe,
-            a.binaries,
-            a.zipfiles,
-            a.datas,
-            strip=False,
-            upx=True,
-            upx_exclude=[],
-            name='TallyfyAI',
-        )" > TallyfyAI.spec
+        " > TallyfyAI.spec
         
     - name: List files
       run: |
@@ -176,6 +183,27 @@ jobs:
         COGNITO_USER_POOL_ID: ${{ secrets.COGNITO_USER_POOL_ID || 'us-east-1_dummy' }}
         COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID || 'dummyclientid' }}
         COGNITO_REGION: ${{ secrets.COGNITO_REGION || 'us-east-1' }}
+        
+    - name: Check executable
+      run: |
+        dir dist
+        if (Test-Path "dist\TallyfyAI.exe") {
+          Write-Host "Executable found successfully"
+        } else {
+          Write-Error "Executable not found, build may have failed"
+          exit 1
+        }
+        Write-Host "Testing executable startup..."
+        $process = Start-Process -FilePath "dist\TallyfyAI.exe" -PassThru
+        Start-Sleep -Seconds 5
+        if ($process.HasExited) {
+          Write-Error "Executable terminated immediately, check for runtime errors"
+          exit 1
+        } else {
+          Write-Host "Executable is running properly"
+          Stop-Process -Id $process.Id -Force
+        }
+      continue-on-error: true
         
     - name: Install NSIS
       run: |
@@ -216,7 +244,38 @@ jobs:
             SetOutPath "$INSTDIR"
             
             ; Copy application files
-            File /r "dist\TallyfyAI\*.*"
+            File "dist\TallyfyAI.exe"
+            
+            ; Create empty necessary files/folders
+            SetOutPath "$INSTDIR\data"
+            FileOpen $0 "$INSTDIR\data\placeholder.txt" w
+            FileWrite $0 "Placeholder file"
+            FileClose $0
+            
+            SetOutPath "$INSTDIR\templates"
+            FileOpen $0 "$INSTDIR\templates\index.html" w
+            FileWrite $0 "<!DOCTYPE html><html><body><h1>Placeholder</h1></body></html>"
+            FileClose $0
+            
+            SetOutPath "$INSTDIR\static"
+            FileOpen $0 "$INSTDIR\static\style.css" w
+            FileWrite $0 "/* Placeholder CSS */"
+            FileClose $0
+            
+            SetOutPath "$INSTDIR"
+            
+            ; Create .env file
+            FileOpen $0 "$INSTDIR\.env" w
+            FileWrite $0 "AWS_DB_URL=${{ secrets.AWS_DB_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }}$\r$\n"
+            FileWrite $0 "TALLY_URL=${{ secrets.TALLY_URL || 'http://localhost:9000' }}$\r$\n"
+            FileWrite $0 "COGNITO_USER_POOL_ID=${{ secrets.COGNITO_USER_POOL_ID || 'us-east-1_dummy' }}$\r$\n"
+            FileWrite $0 "COGNITO_CLIENT_ID=${{ secrets.COGNITO_CLIENT_ID || 'dummyclientid' }}$\r$\n"
+            FileWrite $0 "COGNITO_REGION=${{ secrets.COGNITO_REGION || 'us-east-1' }}$\r$\n"
+            FileClose $0
+            
+            ; Create empty local_storage.db
+            FileOpen $0 "$INSTDIR\local_storage.db" w
+            FileClose $0
             
             ; Create shortcuts
             CreateDirectory "$SMPROGRAMS\TallyfyAI"
