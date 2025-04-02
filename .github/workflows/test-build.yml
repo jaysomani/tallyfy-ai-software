@@ -1,0 +1,94 @@
+name: Test and Build Tallyfy.ai
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest-github-actions-annotate-failures
+        
+    - name: Run tests
+      run: |
+        python -m pytest -v tests/
+        
+    - name: Run coverage
+      run: |
+        python -m pytest --cov=backend tests/ --cov-report=xml
+        
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install PyInstaller and dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        
+    - name: Build executable
+      run: |
+        pyinstaller --name tallyfy_ai --onefile --windowed main.py
+        
+    - name: Create zip archive
+      run: |
+        powershell Compress-Archive -Path dist/tallyfy_ai.exe -DestinationPath tallyfy_ai.zip
+        
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: tallyfy-ai-windows
+        path: tallyfy_ai.zip
+        
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v0.1.${{ github.run_number }}
+        release_name: Build ${{ github.run_number }}
+        draft: false
+        prerelease: false
+        
+    - name: Upload Release Asset
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./tallyfy_ai.zip
+        asset_name: tallyfy_ai.zip
+        asset_content_type: application/zip 
