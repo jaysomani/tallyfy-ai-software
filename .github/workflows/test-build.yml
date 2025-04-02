@@ -83,9 +83,58 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
         
-    - name: Build executable
+    - name: Create PyInstaller spec file
       run: |
-        pyinstaller --name tallyfy_ai --onefile --windowed main.py
+        echo "# -*- mode: python ; coding: utf-8 -*-
+        
+        block_cipher = None
+        
+        a = Analysis(
+            ['main.py'],
+            pathex=[],
+            binaries=[],
+            datas=[],
+            hiddenimports=['gui', 'gui.login_widget', 'gui.ledger_widget', 'gui.main_window', 'gui.user_icon', 
+                          'backend', 'backend.cognito_auth', 'backend.config', 'backend.db_connector', 
+                          'backend.tally_api', 'backend.local_db_connector', 'backend.hardware', 
+                          'services', 'utils'],
+            hookspath=[],
+            hooksconfig={},
+            runtime_hooks=[],
+            excludes=[],
+            win_no_prefer_redirects=False,
+            win_private_assemblies=False,
+            cipher=block_cipher,
+            noarchive=False,
+        )
+        
+        pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+        
+        exe = EXE(
+            pyz,
+            a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            [],
+            name='tallyfy_ai',
+            debug=False,
+            bootloader_ignore_signals=False,
+            strip=False,
+            upx=True,
+            upx_exclude=[],
+            runtime_tmpdir=None,
+            console=False,
+            disable_windowed_traceback=False,
+            argv_emulation=False,
+            target_arch=None,
+            codesign_identity=None,
+            entitlements_file=None,
+        )" > tallyfy_ai.spec
+        
+    - name: Build executable with spec file
+      run: |
+        pyinstaller tallyfy_ai.spec
       env:
         AWS_DB_URL: ${{ secrets.AWS_DB_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }}
         TALLY_URL: ${{ secrets.TALLY_URL || 'http://localhost:9000' }}
@@ -93,9 +142,16 @@ jobs:
         COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID || 'dummyclientid' }}
         COGNITO_REGION: ${{ secrets.COGNITO_REGION || 'us-east-1' }}
         
+    - name: Create additional directories and copy data files
+      run: |
+        mkdir -p dist/data
+        xcopy /E /I /Y data dist\data
+        copy local_storage.db dist\
+      continue-on-error: true
+        
     - name: Create zip archive
       run: |
-        powershell Compress-Archive -Path dist/tallyfy_ai.exe -DestinationPath tallyfy_ai.zip
+        powershell Compress-Archive -Path dist/* -DestinationPath tallyfy_ai_full.zip
         
     - name: Upload exe artifact
       uses: actions/upload-artifact@v4
@@ -103,11 +159,11 @@ jobs:
         name: tallyfy-ai-exe
         path: dist/tallyfy_ai.exe
         
-    - name: Upload zip artifact
+    - name: Upload full package artifact
       uses: actions/upload-artifact@v4
       with:
-        name: tallyfy-ai-zip
-        path: tallyfy_ai.zip
+        name: tallyfy-ai-full-package
+        path: tallyfy_ai_full.zip
         
     - name: Create Release
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -120,4 +176,4 @@ jobs:
         prerelease: false
         files: |
           dist/tallyfy_ai.exe
-          tallyfy_ai.zip 
+          tallyfy_ai_full.zip 
