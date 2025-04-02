@@ -93,10 +93,10 @@ jobs:
         echo COGNITO_REGION=${{ secrets.COGNITO_REGION || 'us-east-1' }} >> .env
         
         # Create empty local_storage.db if it doesn't exist
-        echo. > local_storage.db
+        New-Item -Path 'local_storage.db' -ItemType File -Force
         
         # Create data directory structure if it doesn't exist
-        mkdir -p data
+        New-Item -Path 'data' -ItemType Directory -Force
         echo "This is a placeholder file" > data/placeholder.txt
         
     - name: Create PyInstaller spec file
