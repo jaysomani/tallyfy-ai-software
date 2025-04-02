@@ -93,11 +93,13 @@ jobs:
             ['main.py'],
             pathex=[],
             binaries=[],
-            datas=[],
+            datas=[('.env', '.'), ('README.md', '.'), ('local_storage.db', '.'), ('data', 'data')],
             hiddenimports=['gui', 'gui.login_widget', 'gui.ledger_widget', 'gui.main_window', 'gui.user_icon', 
                           'backend', 'backend.cognito_auth', 'backend.config', 'backend.db_connector', 
                           'backend.tally_api', 'backend.local_db_connector', 'backend.hardware', 
-                          'services', 'utils'],
+                          'services', 'services.flask_server', 'services.websocket_server',
+                          'utils', 'utils.logging_config',
+                          'PyQt5', 'PyQt5.QtCore', 'PyQt5.QtWidgets', 'PyQt5.QtGui'],
             hookspath=[],
             hooksconfig={},
             runtime_hooks=[],
@@ -113,28 +115,36 @@ jobs:
         exe = EXE(
             pyz,
             a.scripts,
-            a.binaries,
-            a.zipfiles,
-            a.datas,
             [],
-            name='tallyfy_ai',
+            exclude_binaries=True,
+            name='TallyfyAI',
             debug=False,
             bootloader_ignore_signals=False,
             strip=False,
             upx=True,
-            upx_exclude=[],
-            runtime_tmpdir=None,
             console=False,
             disable_windowed_traceback=False,
             argv_emulation=False,
             target_arch=None,
             codesign_identity=None,
             entitlements_file=None,
-        )" > tallyfy_ai.spec
+            icon='NONE',
+        )
         
-    - name: Build executable with spec file
+        coll = COLLECT(
+            exe,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            strip=False,
+            upx=True,
+            upx_exclude=[],
+            name='TallyfyAI',
+        )" > TallyfyAI.spec
+        
+    - name: Build application
       run: |
-        pyinstaller tallyfy_ai.spec
+        pyinstaller TallyfyAI.spec
       env:
         AWS_DB_URL: ${{ secrets.AWS_DB_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }}
         TALLY_URL: ${{ secrets.TALLY_URL || 'http://localhost:9000' }}
@@ -142,28 +152,104 @@ jobs:
         COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID || 'dummyclientid' }}
         COGNITO_REGION: ${{ secrets.COGNITO_REGION || 'us-east-1' }}
         
-    - name: Create additional directories and copy data files
+    - name: Create empty files if missing
       run: |
-        mkdir -p dist/data
-        xcopy /E /I /Y data dist\data
-        copy local_storage.db dist\
-      continue-on-error: true
+        if not exist local_storage.db (
+          echo. > local_storage.db
+        )
+        if not exist .env (
+          echo AWS_DB_URL=${{ secrets.AWS_DB_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }} > .env
+          echo TALLY_URL=${{ secrets.TALLY_URL || 'http://localhost:9000' }} >> .env
+          echo COGNITO_USER_POOL_ID=${{ secrets.COGNITO_USER_POOL_ID || 'us-east-1_dummy' }} >> .env
+          echo COGNITO_CLIENT_ID=${{ secrets.COGNITO_CLIENT_ID || 'dummyclientid' }} >> .env
+          echo COGNITO_REGION=${{ secrets.COGNITO_REGION || 'us-east-1' }} >> .env
+        )
+        mkdir -p data
         
-    - name: Create zip archive
+    - name: Install NSIS
       run: |
-        powershell Compress-Archive -Path dist/* -DestinationPath tallyfy_ai_full.zip
+        choco install nsis -y
         
-    - name: Upload exe artifact
+    - name: Create NSIS installer script
+      run: |
+        echo '!include "MUI2.nsh"
+        
+        ; Application information
+        Name "Tallyfy AI"
+        OutFile "TallyfyAI_Setup.exe"
+        InstallDir "$PROGRAMFILES\TallyfyAI"
+        InstallDirRegKey HKCU "Software\TallyfyAI" ""
+        
+        ; Request application privileges
+        RequestExecutionLevel admin
+        
+        ; Interface Settings
+        !define MUI_ABORTWARNING
+        !define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
+        !define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+        
+        ; Pages
+        !insertmacro MUI_PAGE_WELCOME
+        !insertmacro MUI_PAGE_DIRECTORY
+        !insertmacro MUI_PAGE_INSTFILES
+        !insertmacro MUI_PAGE_FINISH
+        
+        !insertmacro MUI_UNPAGE_CONFIRM
+        !insertmacro MUI_UNPAGE_INSTFILES
+        
+        ; Languages
+        !insertmacro MUI_LANGUAGE "English"
+        
+        ; Installer sections
+        Section "Install"
+            SetOutPath "$INSTDIR"
+            
+            ; Copy application files
+            File /r "dist\TallyfyAI\*.*"
+            
+            ; Create shortcuts
+            CreateDirectory "$SMPROGRAMS\TallyfyAI"
+            CreateShortcut "$SMPROGRAMS\TallyfyAI\TallyfyAI.lnk" "$INSTDIR\TallyfyAI.exe"
+            CreateShortcut "$DESKTOP\TallyfyAI.lnk" "$INSTDIR\TallyfyAI.exe"
+            
+            ; Create uninstaller
+            WriteUninstaller "$INSTDIR\Uninstall.exe"
+            
+            ; Write registry keys for uninstaller
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TallyfyAI" "DisplayName" "Tallyfy AI"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TallyfyAI" "UninstallString" "$INSTDIR\Uninstall.exe"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TallyfyAI" "DisplayIcon" "$INSTDIR\TallyfyAI.exe"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TallyfyAI" "Publisher" "TallyfyAI"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TallyfyAI" "DisplayVersion" "1.0.0"
+        SectionEnd
+        
+        ; Uninstaller section
+        Section "Uninstall"
+            ; Remove application files
+            RMDir /r "$INSTDIR\*.*"
+            
+            ; Remove shortcuts
+            Delete "$SMPROGRAMS\TallyfyAI\TallyfyAI.lnk"
+            RMDir "$SMPROGRAMS\TallyfyAI"
+            Delete "$DESKTOP\TallyfyAI.lnk"
+            
+            ; Remove uninstaller
+            Delete "$INSTDIR\Uninstall.exe"
+            RMDir "$INSTDIR"
+            
+            ; Remove registry keys
+            DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\TallyfyAI"
+        SectionEnd' > installer.nsi
+        
+    - name: Build installer
+      run: |
+        "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
+        
+    - name: Upload installer artifact
       uses: actions/upload-artifact@v4
       with:
-        name: tallyfy-ai-exe
-        path: dist/tallyfy_ai.exe
-        
-    - name: Upload full package artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: tallyfy-ai-full-package
-        path: tallyfy_ai_full.zip
+        name: tallyfy-ai-installer
+        path: TallyfyAI_Setup.exe
         
     - name: Create Release
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -175,5 +261,4 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          dist/tallyfy_ai.exe
-          tallyfy_ai_full.zip 
+          TallyfyAI_Setup.exe 
