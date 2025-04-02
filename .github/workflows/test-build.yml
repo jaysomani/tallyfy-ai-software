@@ -35,7 +35,7 @@ jobs:
         
     - name: Run tests
       run: |
-        python -m pytest -v -k "not test_flask_server and not test_main" tests/
+        python -m pytest -v tests/test_cognito_auth.py tests/test_db_connector.py tests/test_tally_api.py tests/test_ledger_widget.py tests/test_login_widget.py
       env:
         AWS_DB_URL: ${{ secrets.AWS_DB_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }}
         TALLY_URL: ${{ secrets.TALLY_URL || 'http://localhost:9000' }}
@@ -45,7 +45,7 @@ jobs:
         
     - name: Run coverage
       run: |
-        python -m pytest --cov=backend -k "not test_flask_server and not test_main" tests/ --cov-report=xml
+        python -m pytest --cov=backend tests/test_cognito_auth.py tests/test_db_connector.py tests/test_tally_api.py tests/test_ledger_widget.py tests/test_login_widget.py --cov-report=xml
       env:
         AWS_DB_URL: ${{ secrets.AWS_DB_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }}
         TALLY_URL: ${{ secrets.TALLY_URL || 'http://localhost:9000' }}
